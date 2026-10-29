@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="white">#FFFFFFFF</color>
+    <color name="paper">#FFFFFDFC</color>
+    <color name="ink">#FF202020</color>
+    <color name="muted">#FF77716F</color>
+    <color name="outline">#FFE8D3D1</color>
+    <color name="outline_disabled">#FFEEE5E3</color>
+    <color name="soft_red">#FFFBE3E3</color>
+    <color name="light_red">#FFE45757</color>
+    <color name="light_red_pressed">#FFD94A4A</color>
+    <color name="disabled_text">#FFB5AEAC</color>
+    <color name="icon_background">#FFFBE3E3</color>
+</resources>

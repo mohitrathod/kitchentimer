@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kitchen Timer</string>
+    <string name="eyebrow">Kitchen timer</string>
+    <string name="hint_running">Ticking down</string>
+    <string name="hint_paused">Paused</string>
+    <string name="hint_finished">Time\'s up</string>
+    <string name="action_start">Start</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_reset">Reset</string>
+    <string name="action_stop_alarm">Stop alarm</string>
+    <string name="minutes_down">−1 min</string>
+    <string name="minutes_up">+1 min</string>
+    <string name="gauge_description">Selected minutes: %1$d</string>
+
+    <string name="notification_channel_name">Kitchen timer</string>
+    <string name="notification_channel_description">Timer countdown and alarm</string>
+    <string name="notification_running">Timer running</string>
+    <string name="notification_paused">Timer paused</string>
+    <string name="notification_finished">Time\'s up</string>
+    <string name="notification_remaining">%1$s remaining</string>
+    <string name="notification_finished_text">Tap to stop the alarm</string>
+    <string name="notification_pause">Pause</string>
+    <string name="notification_resume">Resume</string>
+    <string name="notification_reset">Reset</string>
+    <string name="notification_stop">Stop alarm</string>
+</resources>
