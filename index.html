@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="A simple adjustable kitchen timer with a melody alarm.">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Kitchen Timer">
+  <title>Kitchen Timer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23fff'/%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='%23ff7b7b' stroke-width='6' stroke-linecap='round' stroke-dasharray='138.2' stroke-dashoffset='34.6' transform='rotate(-90 32 32)'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #2a1414;
+      --muted: #8a6a6a;
+      --accent: #ff7b7b;
+      --accent-strong: #ff5f5f;
+      --accent-soft: #ffe3e3;
+      --ring-track: #ffe9e9;
+      --font: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      display: grid;
+      place-items: center;
+      min-height: 100svh;
+      min-height: 100dvh;
+      padding:
+        max(1.25rem, env(safe-area-inset-top))
+        max(1.25rem, env(safe-area-inset-right))
+        max(1.25rem, env(safe-area-inset-bottom))
+        max(1.25rem, env(safe-area-inset-left));
+      background: radial-gradient(circle at 50% 16%, #fff4f4, var(--bg) 62%);
+      color: var(--text);
+      font-family: var(--font);
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .timer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(1.5rem, 5vw, 2.5rem);
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .eyebrow {
+      margin: 0;
+      color: #b77979;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+    }
+
+    .gauge {
+      position: relative;
+      width: min(88vw, 64vh, 380px);
+      aspect-ratio: 320 / 240;
+      container-type: inline-size;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    body.is-running .gauge,
+    body.is-paused .gauge,
+    body.is-done .gauge {
+      cursor: default;
+      touch-action: auto;
+    }
+
+    .gauge.is-dragging {
+      cursor: grabbing;
+    }
+
+    .gauge__svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .gauge__track,
+    .gauge__progress {
+      fill: none;
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+
+    .gauge__track {
+      stroke: var(--ring-track);
+    }
+
+    .gauge__progress {
+      stroke: var(--accent);
+      stroke-dashoffset: 0;
+      filter: drop-shadow(0 0 8px rgba(255, 123, 123, 0.3));
+      transition: stroke-dashoffset 0.25s linear, stroke 0.4s ease, filter 0.4s ease;
+    }
+
+    .gauge__tick {
+      stroke: #f5caca;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    .gauge__tick--major {
+      stroke: #eaa6a6;
+      stroke-width: 3;
+    }
+
+    .gauge__needle {
+      stroke: var(--accent);
+      stroke-width: 5;
+      stroke-linecap: round;
+      transition: stroke 0.4s ease;
+    }
+
+    .gauge__marker {
+      fill: var(--accent);
+      stroke: #ffffff;
+      stroke-width: 4;
+      filter: drop-shadow(0 2px 6px rgba(255, 95, 95, 0.28));
+      transition: fill 0.4s ease;
+    }
+
+    .readout {
+      position: absolute;
+      top: 59%;
+      left: 50%;
+      width: 100%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .time {
+      margin: 0;
+      font-size: clamp(2.75rem, 16vw, 5.75rem);
+      font-size: clamp(2.75rem, 26cqw, 5.75rem);
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      text-shadow: 0 0 14px #fff, 0 0 28px #fff;
+    }
+
+    .status {
+      margin: 0.65rem 0 0;
+      padding: 0 1.25rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .setter {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.9rem;
+      margin-top: -0.5rem;
+    }
+
+    .setter__value {
+      min-width: 4.5rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .step {
+      display: grid;
+      place-items: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      padding: 0;
+      border: 1px solid var(--accent-soft);
+      border-radius: 50%;
+      background: #fff;
+      color: #c05454;
+      font: inherit;
+      font-size: 1.4rem;
+      font-weight: 600;
+      line-height: 1;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+    }
+
+    .step:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: #fff5f5;
+    }
+
+    .step:active:not(:disabled) {
+      transform: scale(0.94);
+    }
+
+    .step:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .step:focus-visible,
+    .button:focus-visible {
+      outline: 3px solid rgba(255, 95, 95, 0.4);
+      outline-offset: 3px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+      width: 100%;
+    }
+
+    .button {
+      flex: 1;
+      min-height: 3.5rem;
+      border: 1px solid var(--accent-soft);
+      border-radius: 999px;
+      background: #ffffff;
+      color: #9a5555;
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 650;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+      transition: background 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+    }
+
+    .button:hover {
+      border-color: var(--accent);
+      background: #fff5f5;
+    }
+
+    .button:active {
+      transform: scale(0.97);
+    }
+
+    .button--primary {
+      border-color: transparent;
+      background: linear-gradient(180deg, #ff9292, var(--accent-strong));
+      color: #481010;
+      box-shadow: 0 10px 28px rgba(255, 95, 95, 0.25);
+    }
+
+    .button--primary:hover {
+      background: linear-gradient(180deg, #ffa2a2, #ff7070);
+    }
+
+    .button[hidden] {
+      display: none;
+    }
+
+    body.is-done .gauge__progress {
+      stroke: #e5484d;
+      filter: drop-shadow(0 0 14px rgba(229, 72, 77, 0.4));
+    }
+
+    body.is-done .gauge__needle {
+      stroke: #e5484d;
+    }
+
+    body.is-done .gauge__marker {
+      fill: #e5484d;
+      filter: drop-shadow(0 0 14px rgba(229, 72, 77, 0.4));
+    }
+
+    body.is-done .time {
+      color: #e5484d;
+      animation: pulse 1s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse {
+      from {
+        transform: scale(1);
+      }
+      to {
+        transform: scale(1.04);
+      }
+    }
+
+    @media (max-height: 640px) {
+      .timer {
+        gap: 1.25rem;
+      }
+
+      .status {
+        margin-top: 0.45rem;
+      }
+
+      .setter {
+        margin-top: -0.75rem;
+      }
+    }
+
+    @media (max-height: 560px) and (orientation: landscape) {
+      body {
+        padding:
+          max(0.75rem, env(safe-area-inset-top))
+          max(0.75rem, env(safe-area-inset-right))
+          max(0.75rem, env(safe-area-inset-bottom))
+          max(0.75rem, env(safe-area-inset-left));
+      }
+
+      .eyebrow {
+        display: none;
+      }
+
+      .timer {
+        gap: 0.75rem;
+      }
+
+      .gauge {
+        width: min(56vh, 80vw, 340px);
+      }
+
+      .time {
+        font-size: clamp(2.25rem, 24cqw, 3.5rem);
+      }
+
+      .setter {
+        margin-top: 0;
+      }
+
+      .step {
+        width: 2.5rem;
+        height: 2.5rem;
+      }
+
+      .button {
+        min-height: 3rem;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .button,
+      .step,
+      .gauge__progress,
+      .gauge__needle,
+      .gauge__marker {
+        transition: none;
+      }
+
+      body.is-done .time {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="timer">
+    <p class="eyebrow">Kitchen timer</p>
+    <div class="gauge" id="gauge" title="Drag the gauge to set minutes">
+      <svg class="gauge__svg" viewBox="0 0 320 240" aria-hidden="true">
+        <path class="gauge__track" d="M 54.345 211 A 122 122 0 1 1 265.655 211"></path>
+        <path class="gauge__progress" id="progress" d="M 54.345 211 A 122 122 0 1 1 265.655 211"></path>
+        <g class="gauge__ticks" id="ticks"></g>
+        <line class="gauge__needle" id="needle" x1="243.14" y1="198" x2="265.655" y2="211"></line>
+        <circle class="gauge__marker" id="marker" cx="265.655" cy="211" r="8"></circle>
+      </svg>
+      <div class="readout">
+        <h1 class="time" id="time">60:00</h1>
+        <p class="status" id="status" aria-live="polite">Drag gauge to set minutes</p>
+      </div>
+    </div>
+    <div class="setter">
+      <button class="step" id="minus" type="button" aria-label="Decrease minutes">−</button>
+      <span class="setter__value"><span id="duration">60</span> min</span>
+      <button class="step" id="plus" type="button" aria-label="Increase minutes">+</button>
+    </div>
+    <div class="controls">
+      <button class="button button--primary" id="toggle" type="button">Start</button>
+      <button class="button" id="reset" type="button">Reset</button>
+      <button class="button button--primary" id="stop" type="button" hidden>Stop alarm</button>
+    </div>
+  </main>
+
+  <script>
+    const MAX_MINUTES = 60;
+    const MINUTES_KEY = "kitchenTimerMinutes";
+    const VIEW_WIDTH = 320;
+    const CENTER_X = 160;
+    const CENTER_Y = 150;
+    const RADIUS = 122;
+    const START_ANGLE = -120;
+    const SWEEP = 240;
+    const MAX_ANGLE = START_ANGLE + SWEEP;
+    const NEEDLE_INNER = 96;
+    const MELODY_PERIOD_MS = 2400;
+
+    const timeEl = document.querySelector("#time");
+    const statusEl = document.querySelector("#status");
+    const progressEl = document.querySelector("#progress");
+    const needleEl = document.querySelector("#needle");
+    const markerEl = document.querySelector("#marker");
+    const ticksEl = document.querySelector("#ticks");
+    const toggleEl = document.querySelector("#toggle");
+    const resetEl = document.querySelector("#reset");
+    const stopEl = document.querySelector("#stop");
+    const minusEl = document.querySelector("#minus");
+    const plusEl = document.querySelector("#plus");
+    const durationEl = document.querySelector("#duration");
+    const gaugeEl = document.querySelector("#gauge");
+    const gaugeLength = progressEl.getTotalLength();
+
+    progressEl.style.strokeDasharray = String(gaugeLength);
+
+    function clampMinutes(value) {
+      return Math.min(MAX_MINUTES, Math.max(1, Math.round(value)));
+    }
+
+    function readSavedMinutes() {
+      try {
+        const saved = Number.parseInt(window.localStorage.getItem(MINUTES_KEY), 10);
+        return Number.isFinite(saved) ? clampMinutes(saved) : MAX_MINUTES;
+      } catch {
+        return MAX_MINUTES;
+      }
+    }
+
+    function saveMinutes() {
+      try {
+        window.localStorage.setItem(MINUTES_KEY, String(Math.round(durationMs / 60000)));
+      } catch {}
+    }
+
+    let durationMs = readSavedMinutes() * 60000;
+    let remainingMs = durationMs;
+    let endAt = 0;
+    let state = "idle";
+    let intervalId = null;
+    let audioContext = null;
+    let audioPrimed = false;
+    let wakeLock = null;
+    let dragging = false;
+    let alarmGain = null;
+    let alarmIntervalId = null;
+    let tickBuffer = null;
+    let tickPitchHigh = true;
+    let lastTickSecond = null;
+
+    function canAdjust() {
+      return state === "idle";
+    }
+
+    function formatTime(ms) {
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    function render() {
+      timeEl.textContent = state === "done" ? "00:00" : formatTime(remainingMs);
+
+      const fraction = Math.max(0, Math.min(1, remainingMs / (MAX_MINUTES * 60000)));
+      progressEl.style.strokeDashoffset = String(gaugeLength * (1 - fraction));
+
+      const angle = ((START_ANGLE + SWEEP * fraction) * Math.PI) / 180;
+      const sin = Math.sin(angle);
+      const cos = Math.cos(angle);
+      const outerX = CENTER_X + RADIUS * sin;
+      const outerY = CENTER_Y - RADIUS * cos;
+
+      needleEl.setAttribute("x1", String(CENTER_X + NEEDLE_INNER * sin));
+      needleEl.setAttribute("y1", String(CENTER_Y - NEEDLE_INNER * cos));
+      needleEl.setAttribute("x2", String(outerX));
+      needleEl.setAttribute("y2", String(outerY));
+      markerEl.setAttribute("cx", String(outerX));
+      markerEl.setAttribute("cy", String(outerY));
+
+      durationEl.textContent = String(Math.round(durationMs / 60000));
+      minusEl.disabled = !canAdjust();
+      plusEl.disabled = !canAdjust();
+
+      const ringing = state === "done";
+      toggleEl.hidden = ringing;
+      resetEl.hidden = ringing;
+      stopEl.hidden = !ringing;
+
+      document.body.classList.toggle("is-running", state === "running");
+      document.body.classList.toggle("is-paused", state === "paused");
+      document.body.classList.toggle("is-done", state === "done");
+
+      if (state === "running") {
+        statusEl.textContent = "Running";
+        toggleEl.textContent = "Pause";
+        document.title = `${formatTime(remainingMs)} · Kitchen Timer`;
+      } else if (state === "paused") {
+        statusEl.textContent = "Paused";
+        toggleEl.textContent = "Resume";
+        document.title = "Paused · Kitchen Timer";
+      } else if (state === "done") {
+        statusEl.textContent = "Time's up!";
+        document.title = "Time's up! · Kitchen Timer";
+      } else {
+        statusEl.textContent = "Drag gauge to set minutes";
+        toggleEl.textContent = "Start";
+        document.title = "Kitchen Timer";
+      }
+    }
+
+    function setDurationMinutes(value) {
+      if (!canAdjust()) return;
+
+      durationMs = clampMinutes(value) * 60000;
+      remainingMs = durationMs;
+      state = "idle";
+      saveMinutes();
+      render();
+    }
+
+    function ensureAudio() {
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) return null;
+
+      if (!audioContext) {
+        audioContext = new AudioCtor();
+      }
+
+      if (audioContext.state === "suspended") {
+        audioContext.resume().catch(() => {});
+      }
+
+      if (!audioPrimed) {
+        const buffer = audioContext.createBuffer(1, 1, 22050);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+        audioPrimed = true;
+      }
+
+      return audioContext;
+    }
+
+    async function requestWakeLock() {
+      if (wakeLock || !("wakeLock" in navigator)) return;
+
+      try {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => {
+          wakeLock = null;
+        });
+      } catch {
+        wakeLock = null;
+      }
+    }
+
+    function releaseWakeLock() {
+      if (!wakeLock) return;
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+
+    function playTick() {
+      const context = ensureAudio();
+      if (!context) return;
+
+      if (!tickBuffer) {
+        const length = Math.floor(context.sampleRate * 0.04);
+        tickBuffer = context.createBuffer(1, length, context.sampleRate);
+        const data = tickBuffer.getChannelData(0);
+
+        for (let i = 0; i < length; i += 1) {
+          const envelope = Math.pow(1 - i / length, 4);
+          data[i] = (Math.random() * 2 - 1) * envelope;
+        }
+      }
+
+      const now = context.currentTime;
+      const source = context.createBufferSource();
+      const filter = context.createBiquadFilter();
+      const gain = context.createGain();
+
+      source.buffer = tickBuffer;
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(tickPitchHigh ? 2600 : 1900, now);
+      filter.Q.setValueAtTime(1.2, now);
+      gain.gain.setValueAtTime(tickPitchHigh ? 0.08 : 0.065, now);
+
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(context.destination);
+      source.start(now);
+      tickPitchHigh = !tickPitchHigh;
+    }
+
+    function scheduleMelody(context, output) {
+      const start = context.currentTime + 0.05;
+      const notes = [
+        { frequency: 523.25, at: 0, length: 0.24 },
+        { frequency: 659.25, at: 0.2, length: 0.24 },
+        { frequency: 783.99, at: 0.4, length: 0.24 },
+        { frequency: 1046.5, at: 0.6, length: 0.55 },
+        { frequency: 783.99, at: 1.05, length: 0.24 },
+        { frequency: 1046.5, at: 1.25, length: 0.85 },
+      ];
+
+      for (const note of notes) {
+        const noteStart = start + note.at;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+
+        oscillator.type = "triangle";
+        oscillator.frequency.setValueAtTime(note.frequency, noteStart);
+
+        gain.gain.setValueAtTime(0.0001, noteStart);
+        gain.gain.exponentialRampToValueAtTime(0.22, noteStart + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + note.length);
+
+        oscillator.connect(gain);
+        gain.connect(output);
+        oscillator.start(noteStart);
+        oscillator.stop(noteStart + note.length + 0.05);
+      }
+    }
+
+    function startAlarm() {
+      stopAlarm();
+
+      const context = ensureAudio();
+      if (!context) return;
+
+      alarmGain = context.createGain();
+      alarmGain.gain.setValueAtTime(0.9, context.currentTime);
+      alarmGain.connect(context.destination);
+
+      scheduleMelody(context, alarmGain);
+      alarmIntervalId = window.setInterval(() => {
+        if (alarmGain) {
+          scheduleMelody(context, alarmGain);
+        }
+      }, MELODY_PERIOD_MS);
+    }
+
+    function stopAlarm() {
+      if (alarmIntervalId !== null) {
+        window.clearInterval(alarmIntervalId);
+        alarmIntervalId = null;
+      }
+
+      if (!alarmGain) return;
+
+      const gain = alarmGain;
+      alarmGain = null;
+
+      if (audioContext) {
+        const now = audioContext.currentTime;
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setTargetAtTime(0.0001, now, 0.02);
+      }
+
+      window.setTimeout(() => {
+        try {
+          gain.disconnect();
+        } catch {}
+      }, 250);
+    }
+
+    function clearTick() {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    }
+
+    function tick() {
+      remainingMs = endAt - Date.now();
+
+      if (remainingMs <= 0) {
+        finish();
+        return;
+      }
+
+      const second = Math.ceil(remainingMs / 1000);
+
+      if (lastTickSecond === null || second < lastTickSecond) {
+        lastTickSecond = second;
+        playTick();
+      }
+
+      render();
+    }
+
+    function start() {
+      stopAlarm();
+      ensureAudio();
+
+      if (state === "done" || remainingMs <= 0) {
+        remainingMs = durationMs;
+      }
+
+      endAt = Date.now() + remainingMs;
+      state = "running";
+      lastTickSecond = Math.ceil(remainingMs / 1000);
+      saveMinutes();
+      clearTick();
+      intervalId = window.setInterval(tick, 200);
+      playTick();
+      requestWakeLock();
+      render();
+    }
+
+    function pause() {
+      remainingMs = Math.max(0, endAt - Date.now());
+      state = "paused";
+      lastTickSecond = null;
+      clearTick();
+      releaseWakeLock();
+      render();
+    }
+
+    function finish() {
+      remainingMs = 0;
+      state = "done";
+      lastTickSecond = null;
+      clearTick();
+      releaseWakeLock();
+      render();
+      startAlarm();
+      if (navigator.vibrate) {
+        navigator.vibrate([180, 90, 180]);
+      }
+    }
+
+    function reset() {
+      stopAlarm();
+      remainingMs = durationMs;
+      state = "idle";
+      lastTickSecond = null;
+      clearTick();
+      releaseWakeLock();
+      render();
+    }
+
+    function pointerInfo(event) {
+      const rect = gaugeEl.getBoundingClientRect();
+      const scale = rect.width / VIEW_WIDTH;
+      const x = (event.clientX - rect.left) / scale - CENTER_X;
+      const y = (event.clientY - rect.top) / scale - CENTER_Y;
+      const angle = (Math.atan2(x, -y) * 180) / Math.PI;
+
+      return { angle, distance: Math.hypot(x, y) };
+    }
+
+    function minutesFromPointer(event) {
+      const { angle } = pointerInfo(event);
+      const clamped = Math.max(START_ANGLE, Math.min(MAX_ANGLE, angle));
+      return ((clamped - START_ANGLE) / SWEEP) * MAX_MINUTES;
+    }
+
+    function buildTicks() {
+      for (let minute = 0; minute <= MAX_MINUTES; minute += 5) {
+        const angle = ((START_ANGLE + (SWEEP * minute) / MAX_MINUTES) * Math.PI) / 180;
+        const major = minute % 15 === 0;
+        const inner = major ? 98 : 105;
+        const sin = Math.sin(angle);
+        const cos = Math.cos(angle);
+        const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+
+        tick.setAttribute("x1", String(CENTER_X + inner * sin));
+        tick.setAttribute("y1", String(CENTER_Y - inner * cos));
+        tick.setAttribute("x2", String(CENTER_X + 114 * sin));
+        tick.setAttribute("y2", String(CENTER_Y - 114 * cos));
+        tick.setAttribute("class", major ? "gauge__tick gauge__tick--major" : "gauge__tick");
+        ticksEl.appendChild(tick);
+      }
+    }
+
+    toggleEl.addEventListener("click", () => {
+      if (state === "running") {
+        pause();
+      } else {
+        start();
+      }
+    });
+
+    resetEl.addEventListener("click", reset);
+
+    stopEl.addEventListener("click", () => {
+      stopAlarm();
+      remainingMs = durationMs;
+      state = "idle";
+      render();
+    });
+
+    minusEl.addEventListener("click", () => {
+      setDurationMinutes(durationMs / 60000 - 1);
+    });
+
+    plusEl.addEventListener("click", () => {
+      setDurationMinutes(durationMs / 60000 + 1);
+    });
+
+    gaugeEl.addEventListener("pointerdown", (event) => {
+      if (!canAdjust() || (event.pointerType === "mouse" && event.button !== 0)) return;
+
+      const { angle, distance } = pointerInfo(event);
+      if (distance < 85 || distance > 155 || angle < START_ANGLE || angle > MAX_ANGLE) return;
+
+      dragging = true;
+      gaugeEl.setPointerCapture(event.pointerId);
+      gaugeEl.classList.add("is-dragging");
+      setDurationMinutes(minutesFromPointer(event));
+      event.preventDefault();
+    });
+
+    gaugeEl.addEventListener("pointermove", (event) => {
+      if (!dragging) return;
+
+      setDurationMinutes(minutesFromPointer(event));
+      event.preventDefault();
+    });
+
+    gaugeEl.addEventListener("pointerup", (event) => {
+      dragging = false;
+      gaugeEl.classList.remove("is-dragging");
+
+      if (gaugeEl.hasPointerCapture(event.pointerId)) {
+        gaugeEl.releasePointerCapture(event.pointerId);
+      }
+    });
+
+    gaugeEl.addEventListener("pointercancel", () => {
+      dragging = false;
+      gaugeEl.classList.remove("is-dragging");
+    });
+
+    gaugeEl.addEventListener("wheel", (event) => {
+      if (!canAdjust()) return;
+
+      event.preventDefault();
+      setDurationMinutes(durationMs / 60000 + (event.deltaY < 0 ? 1 : -1));
+    }, { passive: false });
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && state === "running") {
+        tick();
+        requestWakeLock();
+      }
+    });
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => registrations.forEach((registration) => registration.unregister()))
+        .catch(() => {});
+    }
+
+    if ("caches" in window) {
+      caches.keys()
+        .then((keys) => Promise.all(
+          keys.filter((key) => key.startsWith("kitchen-timer")).map((key) => caches.delete(key))
+        ))
+        .catch(() => {});
+    }
+
+    buildTicks();
+    render();
+  </script>
+</body>
+</html>
