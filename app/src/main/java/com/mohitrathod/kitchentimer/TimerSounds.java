@@ -14,27 +14,16 @@ import java.nio.charset.StandardCharsets;
 
 public final class TimerSounds {
     private static final int SAMPLE_RATE = 22050;
-    private static final String TICK_FILE = "tick_v1.wav";
     private static final String ALARM_FILE = "alarm_v1.wav";
 
-    private final SoundPool tickPool;
     private final SoundPool alarmPool;
-    private int tickId;
     private int alarmId;
 
-    private boolean tickLoaded;
     private boolean alarmLoaded;
     private boolean alarmPending;
     private int alarmStreamId;
 
     public TimerSounds(Context context) {
-        tickPool = new SoundPool.Builder()
-                .setMaxStreams(1)
-                .setAudioAttributes(audioAttributes(
-                        AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
-                        AudioAttributes.CONTENT_TYPE_SONIFICATION
-                ))
-                .build();
         alarmPool = new SoundPool.Builder()
                 .setMaxStreams(1)
                 .setAudioAttributes(audioAttributes(
@@ -43,11 +32,6 @@ public final class TimerSounds {
                 ))
                 .build();
 
-        tickPool.setOnLoadCompleteListener((soundPool, sampleId, status) -> {
-            if (status == 0 && sampleId == tickId) {
-                tickLoaded = true;
-            }
-        });
         alarmPool.setOnLoadCompleteListener((soundPool, sampleId, status) -> {
             if (status == 0 && sampleId == alarmId) {
                 alarmLoaded = true;
@@ -58,15 +42,7 @@ public final class TimerSounds {
             }
         });
 
-        tickId = load(tickPool, context, TICK_FILE, generateTick());
         alarmId = load(alarmPool, context, ALARM_FILE, generateAlarm());
-    }
-
-    public void playTick() {
-        if (!tickLoaded) {
-            return;
-        }
-        tickPool.play(tickId, 0.32f, 0.32f, 1, 0, 1f);
     }
 
     public void startAlarm() {
@@ -90,7 +66,6 @@ public final class TimerSounds {
 
     public void release() {
         stopAlarm();
-        tickPool.release();
         alarmPool.release();
     }
 
@@ -118,19 +93,6 @@ public final class TimerSounds {
             }
         }
         return pool.load(file.getAbsolutePath(), 1);
-    }
-
-    private static short[] generateTick() {
-        int count = (int) (0.055f * SAMPLE_RATE);
-        short[] pcm = new short[count];
-        for (int i = 0; i < count; i++) {
-            double t = i / (double) SAMPLE_RATE;
-            double envelope = Math.exp(-t * 75.0);
-            double value = Math.sin(2.0 * Math.PI * 1700.0 * t) * 0.45
-                    + Math.sin(2.0 * Math.PI * 3400.0 * t) * 0.12;
-            pcm[i] = (short) (value * envelope * Short.MAX_VALUE);
-        }
-        return pcm;
     }
 
     private static short[] generateAlarm() {

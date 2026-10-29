@@ -1,12 +1,15 @@
 package com.mohitrathod.kitchentimer;
 
 import android.app.Notification;
+import android.app.AlarmManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -19,6 +22,7 @@ public final class TimerService extends Service {
     public static final String ACTION_RESUME = "com.mohitrathod.kitchentimer.action.RESUME";
     public static final String ACTION_RESET = "com.mohitrathod.kitchentimer.action.RESET";
     public static final String ACTION_STOP_ALARM = "com.mohitrathod.kitchentimer.action.STOP_ALARM";
+    private static final String ACTION_FINISH = "com.mohitrathod.kitchentimer.action.FINISH";
 
     private static final String EXTRA_MINUTES = "minutes";
     private static final String CHANNEL_ID = "kitchen_timer";
@@ -28,22 +32,39 @@ public final class TimerService extends Service {
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private NotificationManager notificationManager;
+    private AlarmManager alarmManager;
     private TimerSounds sounds;
     private PowerManager.WakeLock wakeLock;
     private Runnable tickRunnable;
     private boolean foregroundStarted;
+    private boolean screenReceiverRegistered;
     private long endpointMillis;
     private long pausedMillis;
     private int selectedMinutes = TimerState.DEFAULT_MINUTES;
-    private int lastTickSecond = -1;
     private int lastNotificationSecond = -1;
+    private final BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                pauseScreenOffCountdown();
+            } else if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+                resumeScreenOnCountdown();
+            }
+        }
+    };
 
     @Override
     public void onCreate() {
         super.onCreate();
         notificationManager = getSystemService(NotificationManager.class);
+        alarmManager = getSystemService(AlarmManager.class);
         sounds = new TimerSounds(this);
         createNotificationChannel();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_SCREEN_OFF);
+        filter.addAction(Intent.ACTION_SCREEN_ON);
+        registerReceiver(screenStateReceiver, filter);
+        screenReceiverRegistered = true;
     }
 
     @Override
@@ -64,6 +85,8 @@ public final class TimerService extends Service {
             pauseTimer();
         } else if (ACTION_RESUME.equals(action)) {
             resumeTimer();
+        } else if (ACTION_FINISH.equals(action)) {
+            finishIfDue();
         } else if (ACTION_RESET.equals(action) || ACTION_STOP_ALARM.equals(action)) {
             resetTimer();
         } else if (TimerRuntime.getState().getPhase() == TimerState.Phase.IDLE) {
@@ -82,14 +105,17 @@ public final class TimerService extends Service {
                 pausedMillis
         ));
         ensureForeground();
-        acquireWakeLock();
         updateNotification(true);
         beginCountdown();
     }
 
     private void beginCountdown() {
         endpointMillis = SystemClock.elapsedRealtime() + pausedMillis;
-        lastTickSecond = -1;
+        scheduleCountdownForScreenState();
+    }
+
+    private void startVisibleCountdown() {
+        cancelFinishAlarm();
         lastNotificationSecond = -1;
         handler.removeCallbacksAndMessages(null);
         tickRunnable = new Runnable() {
@@ -99,23 +125,91 @@ public final class TimerService extends Service {
                 TimerRuntime.updateRemaining(remaining);
 
                 int seconds = (int) ((remaining + 999L) / 1000L);
-                if (seconds != lastTickSecond) {
-                    lastTickSecond = seconds;
-                    if (remaining > 0L) {
-                        sounds.playTick();
-                    }
-                }
-
                 if (remaining <= 0L) {
                     finishTimer();
                     return;
                 }
 
                 maybeUpdateNotification(seconds);
-                handler.postDelayed(this, 80L);
+                long nextSecondDelay = remaining - ((long) seconds - 1L) * 1000L;
+                handler.postDelayed(this, Math.max(nextSecondDelay, 1L));
             }
         };
         handler.post(tickRunnable);
+    }
+
+    private void pauseScreenOffCountdown() {
+        if (TimerRuntime.getState().getPhase() != TimerState.Phase.RUNNING) {
+            return;
+        }
+        handler.removeCallbacksAndMessages(null);
+        tickRunnable = null;
+        releaseWakeLock();
+        long remaining = Math.max(endpointMillis - SystemClock.elapsedRealtime(), 0L);
+        TimerRuntime.updateRemaining(remaining);
+        if (remaining == 0L) {
+            finishTimer();
+        } else {
+            scheduleFinishAlarm();
+        }
+    }
+
+    private void resumeScreenOnCountdown() {
+        if (TimerRuntime.getState().getPhase() != TimerState.Phase.RUNNING) {
+            return;
+        }
+        long remaining = Math.max(endpointMillis - SystemClock.elapsedRealtime(), 0L);
+        if (remaining == 0L) {
+            finishTimer();
+        } else {
+            TimerRuntime.updateRemaining(remaining);
+            startVisibleCountdown();
+        }
+    }
+
+    private void scheduleCountdownForScreenState() {
+        PowerManager powerManager = getSystemService(PowerManager.class);
+        if (powerManager.isInteractive()) {
+            startVisibleCountdown();
+        } else {
+            scheduleFinishAlarm();
+        }
+    }
+
+    private void scheduleFinishAlarm() {
+        alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                endpointMillis,
+                finishPendingIntent()
+        );
+    }
+
+    private void cancelFinishAlarm() {
+        PendingIntent pendingIntent = finishPendingIntent();
+        alarmManager.cancel(pendingIntent);
+        pendingIntent.cancel();
+    }
+
+    private PendingIntent finishPendingIntent() {
+        Intent intent = new Intent(this, TimerService.class).setAction(ACTION_FINISH);
+        return PendingIntent.getForegroundService(
+                this,
+                5,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
+    private void finishIfDue() {
+        if (TimerRuntime.getState().getPhase() != TimerState.Phase.RUNNING) {
+            return;
+        }
+        if (SystemClock.elapsedRealtime() < endpointMillis) {
+            scheduleFinishAlarm();
+            return;
+        }
+        ensureForeground();
+        finishTimer();
     }
 
     private void pauseTimer() {
@@ -127,6 +221,7 @@ public final class TimerService extends Service {
         long remaining = Math.max(endpointMillis - SystemClock.elapsedRealtime(), 0L);
         handler.removeCallbacksAndMessages(null);
         tickRunnable = null;
+        cancelFinishAlarm();
         releaseWakeLock();
 
         if (remaining <= 0L) {
@@ -156,7 +251,6 @@ public final class TimerService extends Service {
                 pausedMillis
         ));
         ensureForeground();
-        acquireWakeLock();
         updateNotification(true);
         beginCountdown();
     }
@@ -164,6 +258,7 @@ public final class TimerService extends Service {
     private void finishTimer() {
         handler.removeCallbacksAndMessages(null);
         tickRunnable = null;
+        cancelFinishAlarm();
         TimerRuntime.setState(new TimerState(
                 TimerState.Phase.FINISHED,
                 selectedMinutes,
@@ -178,6 +273,7 @@ public final class TimerService extends Service {
     private void resetTimer() {
         handler.removeCallbacksAndMessages(null);
         tickRunnable = null;
+        cancelFinishAlarm();
         sounds.stopAlarm();
         releaseWakeLock();
         TimerRuntime.setState(new TimerState(
@@ -346,6 +442,10 @@ public final class TimerService extends Service {
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         tickRunnable = null;
+        if (screenReceiverRegistered) {
+            unregisterReceiver(screenStateReceiver);
+            screenReceiverRegistered = false;
+        }
         if (sounds != null) {
             sounds.release();
         }

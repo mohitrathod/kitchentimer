@@ -5,6 +5,8 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -42,6 +44,7 @@ public final class TimerGaugeView extends View {
     private float dragTravelDegrees;
     private int dragStartMinutes;
     private float timeTextSize;
+    private ToneGenerator adjustmentTone;
 
     public TimerGaugeView(Context context) {
         this(context, null);
@@ -266,6 +269,7 @@ public final class TimerGaugeView extends View {
                 ));
                 next = Math.max(TimerState.MIN_MINUTES, Math.min(next, TimerState.MAX_MINUTES));
                 if (next != state.getSelectedMinutes() && listener != null) {
+                    playAdjustmentClick();
                     listener.onMinutesChanged(next);
                 }
                 return true;
@@ -286,6 +290,13 @@ public final class TimerGaugeView extends View {
         }
     }
 
+    private void playAdjustmentClick() {
+        if (adjustmentTone == null) {
+            adjustmentTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 40);
+        }
+        adjustmentTone.startTone(ToneGenerator.TONE_PROP_BEEP, 35);
+    }
+
     private boolean isInDragRegion(float x, float y) {
         float centerX = getWidth() / 2f;
         float centerY = getHeight() * 0.54f;
@@ -299,6 +310,15 @@ public final class TimerGaugeView extends View {
         float centerX = getWidth() / 2f;
         float centerY = getHeight() * 0.54f;
         return (float) Math.toDegrees(Math.atan2(y - centerY, x - centerX));
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (adjustmentTone != null) {
+            adjustmentTone.release();
+            adjustmentTone = null;
+        }
+        super.onDetachedFromWindow();
     }
 
     @Override

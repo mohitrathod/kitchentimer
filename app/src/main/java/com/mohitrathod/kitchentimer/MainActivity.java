@@ -6,7 +6,6 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 
@@ -73,7 +72,6 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         TimerRuntime.removeListener(runtimeListener);
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         super.onDestroy();
     }
 
@@ -136,10 +134,5 @@ public final class MainActivity extends Activity {
             }
         }
 
-        if (state.getPhase() == TimerState.Phase.RUNNING) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        } else {
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        }
     }
 }
