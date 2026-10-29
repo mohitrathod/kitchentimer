@@ -406,6 +406,8 @@
     const SWEEP = 240;
     const MAX_ANGLE = START_ANGLE + SWEEP;
     const NEEDLE_INNER = 96;
+    const SHORT_RANGE_MINUTES = 15;
+    const SHORT_RANGE_SHARE = 0.6;
     const MELODY_PERIOD_MS = 2400;
 
     const timeEl = document.querySelector("#time");
@@ -427,6 +429,30 @@
 
     function clampMinutes(value) {
       return Math.min(MAX_MINUTES, Math.max(1, Math.round(value)));
+    }
+
+    function minutesToFraction(value) {
+      const minutes = Math.min(MAX_MINUTES, Math.max(0, value));
+
+      if (minutes <= SHORT_RANGE_MINUTES) {
+        return (minutes / SHORT_RANGE_MINUTES) * SHORT_RANGE_SHARE;
+      }
+
+      return SHORT_RANGE_SHARE
+        + ((minutes - SHORT_RANGE_MINUTES) / (MAX_MINUTES - SHORT_RANGE_MINUTES))
+        * (1 - SHORT_RANGE_SHARE);
+    }
+
+    function fractionToMinutes(value) {
+      const fraction = Math.min(1, Math.max(0, value));
+
+      if (fraction <= SHORT_RANGE_SHARE) {
+        return (fraction / SHORT_RANGE_SHARE) * SHORT_RANGE_MINUTES;
+      }
+
+      return SHORT_RANGE_MINUTES
+        + ((fraction - SHORT_RANGE_SHARE) / (1 - SHORT_RANGE_SHARE))
+        * (MAX_MINUTES - SHORT_RANGE_MINUTES);
     }
 
     function readSavedMinutes() {
@@ -473,7 +499,7 @@
     function render() {
       timeEl.textContent = state === "done" ? "00:00" : formatTime(remainingMs);
 
-      const fraction = Math.max(0, Math.min(1, remainingMs / (MAX_MINUTES * 60000)));
+      const fraction = minutesToFraction(remainingMs / 60000);
       progressEl.style.strokeDashoffset = String(gaugeLength * (1 - fraction));
 
       const angle = ((START_ANGLE + SWEEP * fraction) * Math.PI) / 180;
@@ -767,12 +793,12 @@
     function minutesFromPointer(event) {
       const { angle } = pointerInfo(event);
       const clamped = Math.max(START_ANGLE, Math.min(MAX_ANGLE, angle));
-      return ((clamped - START_ANGLE) / SWEEP) * MAX_MINUTES;
+      return fractionToMinutes((clamped - START_ANGLE) / SWEEP);
     }
 
     function buildTicks() {
       for (let minute = 0; minute <= MAX_MINUTES; minute += 5) {
-        const angle = ((START_ANGLE + (SWEEP * minute) / MAX_MINUTES) * Math.PI) / 180;
+        const angle = ((START_ANGLE + SWEEP * minutesToFraction(minute)) * Math.PI) / 180;
         const major = minute % 15 === 0;
         const inner = major ? 98 : 105;
         const sin = Math.sin(angle);
