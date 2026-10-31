@@ -58,7 +58,11 @@ public final class MainActivity extends Activity {
                 this,
                 TimerService.ACTION_STOP_ALARM
         ));
+    }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
         TimerRuntime.addListener(runtimeListener);
         render(TimerRuntime.getState());
     }
@@ -70,9 +74,9 @@ public final class MainActivity extends Activity {
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onStop() {
         TimerRuntime.removeListener(runtimeListener);
-        super.onDestroy();
+        super.onStop();
     }
 
     private void changeMinutes(int minutes) {

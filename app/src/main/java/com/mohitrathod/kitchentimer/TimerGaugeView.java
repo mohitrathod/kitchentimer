@@ -22,6 +22,10 @@ public final class TimerGaugeView extends View {
     private static final int MUTED = 0xFF77716F;
     private static final float MIN_DRAG_RADIUS_RATIO = 0.35f;
     private static final float MAX_DRAG_RADIUS_RATIO = 1.65f;
+    private static final float CENTER_Y_RATIO = 0.54f;
+    private static final float GAUGE_RADIUS_RATIO = 0.36f;
+    private static final float LABEL_OFFSET_DP = 19f;
+    private static final int[] LABEL_MINUTES = {0, 5, 10, 15, 30, 45, 60};
 
     private final Paint arcPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint tickPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -121,9 +125,9 @@ public final class TimerGaugeView extends View {
         float width = getWidth();
         float height = getHeight();
         float centerX = width / 2f;
-        float centerY = height * 0.54f;
+        float centerY = height * CENTER_Y_RATIO;
         float min = Math.min(width, height);
-        float radius = min * 0.36f;
+        float radius = min * GAUGE_RADIUS_RATIO;
         float trackWidth = 18f * density;
 
         float arcFraction;
@@ -174,10 +178,9 @@ public final class TimerGaugeView extends View {
             );
         }
 
-        float labelRadius = radius + 19f * density;
+        float labelRadius = radius + LABEL_OFFSET_DP * density;
         float labelBaseline = labelPaint.getTextSize() * 0.34f;
-        int[] labels = {0, 5, 10, 15, 30, 45, 60};
-        for (int minute : labels) {
+        for (int minute : LABEL_MINUTES) {
             double angle = Math.toRadians(GaugeScale.angleForMinutes(minute));
             canvas.drawText(
                     String.valueOf(minute),
@@ -244,7 +247,8 @@ public final class TimerGaugeView extends View {
 
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                if (!isInDragRegion(event.getX(), event.getY())) {
+                int labelMinute = labelMinuteAt(event.getX(), event.getY());
+                if (labelMinute < 0 && !isInDragRegion(event.getX(), event.getY())) {
                     return false;
                 }
                 dragging = true;
@@ -253,6 +257,17 @@ public final class TimerGaugeView extends View {
                 dragStartMinutes = state.getSelectedMinutes();
                 if (getParent() != null) {
                     getParent().requestDisallowInterceptTouchEvent(true);
+                }
+                if (labelMinute >= 0) {
+                    int next = Math.max(
+                            TimerState.MIN_MINUTES,
+                            Math.min(labelMinute, TimerState.MAX_MINUTES)
+                    );
+                    dragStartMinutes = next;
+                    if (next != state.getSelectedMinutes() && listener != null) {
+                        playAdjustmentClick();
+                        listener.onMinutesChanged(next);
+                    }
                 }
                 return true;
 
@@ -297,10 +312,34 @@ public final class TimerGaugeView extends View {
         adjustmentTone.startTone(ToneGenerator.TONE_PROP_BEEP, 35);
     }
 
+    private int labelMinuteAt(float x, float y) {
+        float centerX = getWidth() / 2f;
+        float centerY = getHeight() * CENTER_Y_RATIO;
+        float radius = Math.min(getWidth(), getHeight()) * GAUGE_RADIUS_RATIO;
+        float labelRadius = radius + LABEL_OFFSET_DP * density;
+        float hitRadius = Math.max(labelPaint.getTextSize() * 1.4f, 20f * density);
+        float hitRadiusSquared = hitRadius * hitRadius;
+        int nearest = -1;
+        float nearestDistanceSquared = Float.MAX_VALUE;
+        for (int minute : LABEL_MINUTES) {
+            double angle = Math.toRadians(GaugeScale.angleForMinutes(minute));
+            float labelX = centerX + (float) Math.cos(angle) * labelRadius;
+            float labelY = centerY + (float) Math.sin(angle) * labelRadius;
+            float dx = x - labelX;
+            float dy = y - labelY;
+            float distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared <= hitRadiusSquared && distanceSquared < nearestDistanceSquared) {
+                nearestDistanceSquared = distanceSquared;
+                nearest = minute;
+            }
+        }
+        return nearest;
+    }
+
     private boolean isInDragRegion(float x, float y) {
         float centerX = getWidth() / 2f;
-        float centerY = getHeight() * 0.54f;
-        float radius = Math.min(getWidth(), getHeight()) * 0.36f;
+        float centerY = getHeight() * CENTER_Y_RATIO;
+        float radius = Math.min(getWidth(), getHeight()) * GAUGE_RADIUS_RATIO;
         float distance = (float) Math.hypot(x - centerX, y - centerY);
         return distance >= radius * MIN_DRAG_RADIUS_RATIO
                 && distance <= radius * MAX_DRAG_RADIUS_RATIO;
@@ -308,7 +347,7 @@ public final class TimerGaugeView extends View {
 
     private float touchAngle(float x, float y) {
         float centerX = getWidth() / 2f;
-        float centerY = getHeight() * 0.54f;
+        float centerY = getHeight() * CENTER_Y_RATIO;
         return (float) Math.toDegrees(Math.atan2(y - centerY, x - centerX));
     }
 
